@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Física | Dinámica de Plano Inclinado</title>
+    <style>
+        :root { --primary: #0a3d62; --bg: #f4f7f6; --text: #333; --accent: #e67e22; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 10px; background: var(--bg); color: var(--text); }
+        h2 { color: var(--primary); font-size: 1.3em; text-align: center; margin-bottom: 10px; margin-top: 5px; }
+        .contenedor-principal { display: flex; flex-direction: column; gap: 10px; max-width: 900px; margin: 0 auto; }
+        .panel { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        /* Controles compactos en cuadrícula */
+        .controles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 5px; }
+        label { display: block; font-weight: 600; font-size: 0.85em; margin-bottom: 2px; }
+        input[type="range"] { width: 100%; margin: 0; padding: 0; }
+        .valor { color: var(--accent); font-weight: bold; }
+        
+        /* Campo que ocupa el ancho completo para el ángulo de la fuerza */
+        .control-full { grid-column: 1 / -1; margin-top: 5px; }
+        
+        canvas { width: 100%; height: auto; background: white; border: 1px solid #ccc; border-radius: 8px; display: block; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        .botones { display: flex; gap: 10px; margin-top: 10px; }
+        button { flex: 1; padding: 10px; border: none; border-radius: 5px; font-weight: bold; font-size: 0.95em; cursor: pointer; color: white; transition: background 0.2s;}
+        #btnSimular { background: var(--primary); }
+        #btnSimular:active { background: #062842; }
+        #btnReiniciar { background: #7f8c8d; }
+        
+        /* Estilos de resultados pedagógicos */
+        .res-grupo { background: #fdfefe; border: 1px solid #e1e8ed; border-radius: 5px; padding: 8px; margin-bottom: 8px; }
+        .res-titulo { font-size: 0.9em; font-weight: bold; color: #2c3e50; margin-bottom: 6px; }
+        .res-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #eee;}
+        .formula { font-size: 0.75em; color: #7f8c8d; font-family: monospace; background: #f4f6f7; padding: 2px 4px; border-radius: 3px; display: block; margin-top: 2px;}
+        
+        .warning { color: #c0392b; font-weight: bold; font-size: 0.85em; display: none; text-align: center; padding: 8px; background: #fadbd8; border-radius: 5px; margin-top: 5px;}
+        .destacado { font-size: 1.1em; color: #c0392b; font-weight: bold;}
+    </style>
+</head>
+<body>
+    <div class="contenedor-principal">
+        <h2>Física | Dinámica de Plano Inclinado</h2>
+        
+        <!-- PANEL DE CONTROLES ARRIBA -->
+        <div class="panel">
+            <div class="controles-grid">
+                <div>
+                    <label>Ángulo Rampa (θ): <span id="valA" class="valor">30</span>°</label>
+                    <input type="range" id="inAngulo" min="0" max="45" value="30">
+                </div>
+                <div>
+                    <label>Masa (m): <span id="valM" class="valor">10</span> kg</label>
+                    <input type="range" id="inMasa" min="1" max="50" value="10">
+                </div>
+                <div>
+                    <label>Fricción (µ): <span id="valFr" class="valor">0.2</span></label>
+                    <input type="range" id="inFriccion" min="0" max="1" step="0.05" value="0.2">
+                </div>
+                <div>
+                    <label>Fuerza Ext (F): <span id="valF" class="valor">0</span> N</label>
+                    <input type="range" id="inFuerza" min="0" max="500" value="0">
+                </div>
+                <div class="control-full">
+                    <label>Ángulo Fuerza (0° = Abajo | 180° = Arriba): <span id="valAngF" class="valor">180</span>°</label>
+                    <input type="range" id="inAngFuerza" min="0" max="360" value="180">
+                </div>
+            </div>
+
+            <div class="botones">
+                <button id="btnSimular">Soltar Caja</button>
+                <button id="btnReiniciar">Reiniciar</button>
+            </div>
+        </div>
+
+        <!-- CANVAS AL MEDIO -->
+        <canvas id="lienzo" width="800" height="600"></canvas>
+        <div id="warnVuelo" class="warning">⚠️ ADVERTENCIA: La fuerza vertical superó al peso. ¡La caja despegó!</div>
+
+        <!-- PANEL DE RESULTADOS ABAJO -->
+        <div class="panel">
+            <h3 style="margin-top:0; margin-bottom:10px; font-size:1.1em; color: var(--primary);">Análisis Físico</h3>
+            
+            <div class="res-grupo">
+                <div class="res-titulo">A. Descomposición del Peso</div>
+                <div class="res-item">
+                    <span>Peso Total (P)<br><span class="formula">P = m × g</span></span>
+                    <strong id="resP">0 N</strong>
+                </div>
+                <div class="res-item">
+                    <span>Comp. Perpendicular (Py)<br><span class="formula">Py = P × cos(θ)</span></span>
+                    <strong id="resPy">0 N</strong>
+                </div>
+                <div class="res-item">
+                    <span>Comp. Paralelo (Px)<br><span class="formula">Px = P × sen(θ)</span></span>
+                    <strong id="resPx">0 N</strong>
+                </div>
+            </div>
+
+            <div class="res-grupo">
+                <div class="res-titulo">B. Eje Perpendicular (Y) - Adherencia</div>
+                <div class="res-item">
+                    <span>Fuerza Normal (N)<br><span class="formula">N = Py - F_ext_y</span></span>
+                    <strong id="resN">0 N</strong>
+                </div>
+                <div class="res-item">
+                    <span>Fricción Máxima (Fr)<br><span class="formula">Fr = µ × N</span></span>
+                    <strong id="resFrMax">0 N</strong>
+                </div>
+            </div>
+
+            <div class="res-grupo">
+                <div class="res-titulo">C. Eje Paralelo (X) - Movimiento</div>
+                <div class="res-item">
+                    <span>Fuerza Neta (ΣF)<br><span class="formula">ΣF = (Px + F_ext_x) - Fricción</span></span>
+                    <strong id="resNeta">0 N</strong>
+                </div>
+                <div class="res-item" style="border:none; padding-top:5px;">
+                    <span style="font-weight: bold;">Aceleración Resultante<br><span class="formula">a = ΣF / m</span></span>
+                    <span class="destacado"><span id="resAcel">0</span> m/s²</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('lienzo');
+        const ctx = canvas.getContext('2d');
+        
+        const inAngulo = document.getElementById('inAngulo');
+        const inMasa = document.getElementById('inMasa');
+        const inFriccion = document.getElementById('inFriccion');
+        const inFuerza = document.getElementById('inFuerza');
+        const inAngFuerza = document.getElementById('inAngFuerza');
+        
+        let anguloDeg = 30, masa = 10, mu = 0.2, fuerzaApp = 0, angFuerzaDeg = 180;
+        const g = 9.8;
+        
+        let animando = false;
+        let posX = 0; 
+        let velocidad = 0;
+        let lastTime = 0;
+        let requestID;
+
+        function actualizarTelemetria() {
+            anguloDeg = parseFloat(inAngulo.value);
+            masa = parseFloat(inMasa.value);
+            mu = parseFloat(inFriccion.value);
+            fuerzaApp = parseFloat(inFuerza.value);
+            angFuerzaDeg = parseFloat(inAngFuerza.value);
+            
+            document.getElementById('valA').innerText = anguloDeg;
+            document.getElementById('valM').innerText = masa;
+            document.getElementById('valFr').innerText = mu.toFixed(2);
+            document.getElementById('valF').innerText = fuerzaApp;
+            document.getElementById('valAngF').innerText = angFuerzaDeg;
+
+            let angRampaRad = anguloDeg * Math.PI / 180;
+            let angFuerzaRad = angFuerzaDeg * Math.PI / 180;
+            
+            let peso = masa * g;
+            let px = peso * Math.sin(angRampaRad);
+            let py = peso * Math.cos(angRampaRad);
+            
+            let fax = fuerzaApp * Math.cos(angFuerzaRad);
+            let fay = fuerzaApp * Math.sin(angFuerzaRad);
+
+            let normal = py - fay; 
+            let despegue = false;
+            if(normal <= 0.01) { 
+                normal = 0; 
+                if(fay > py) despegue = true;
+            }
+
+            let friccionMax = mu * normal;
+            let fuerzaSinFriccion = px + fax; 
+            
+            let fuerzaNeta = 0;
+            let aceleracion = 0;
+
+            if(Math.abs(fuerzaSinFriccion) <= friccionMax && velocidad === 0) {
+                fuerzaNeta = 0;
+            } else {
+                let dirMovimiento = velocidad !== 0 ? Math.sign(velocidad) : Math.sign(fuerzaSinFriccion);
+                fuerzaNeta = fuerzaSinFriccion - (dirMovimiento * friccionMax);
+                aceleracion = fuerzaNeta / masa;
+            }
+
+            document.getElementById('resP').innerText = peso.toFixed(1) + " N";
+            document.getElementById('resPy').innerText = py.toFixed(1) + " N";
+            document.getElementById('resPx').innerText = px.toFixed(1) + " N";
+            document.getElementById('resN').innerText = normal.toFixed(1) + " N";
+            document.getElementById('resFrMax').innerText = friccionMax.toFixed(1) + " N";
+            document.getElementById('resNeta').innerText = fuerzaNeta.toFixed(1) + " N";
+            document.getElementById('resAcel').innerText = aceleracion.toFixed(2);
+            
+            document.getElementById('warnVuelo').style.display = despegue ? 'block' : 'none';
+
+            return { normal, friccionMax, fuerzaNeta, aceleracion, angRampaRad, angFuerzaRad, fax, fay, px, despegue };
+        }
+
+        function dibujarFlecha(origenX, origenY, destinoX, destinoY, color, etiqueta) {
+            const headlen = 15; 
+            const dx = destinoX - origenX;
+            const dy = destinoY - origenY;
+            if(Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return; 
+            
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 3;
+            
+            ctx.beginPath();
+            ctx.moveTo(origenX, origenY);
+            ctx.lineTo(destinoX, destinoY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(destinoX, destinoY);
+            ctx.lineTo(destinoX - headlen * Math.cos(angle - Math.PI / 6), destinoY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(destinoX - headlen * Math.cos(angle + Math.PI / 6), destinoY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+
+            if(etiqueta) {
+                ctx.font = "bold 16px Arial";
+                ctx.fillText(etiqueta, destinoX + 8, destinoY + 15);
+            }
+        }
+
+        function dibujarEscena(timestamp) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let phys = actualizarTelemetria();
+            
+            let spanX = 550; 
+            let finRampaX = canvas.width - 50;
+            let finRampaY = canvas.height - 50;
+            let origenRampaX = finRampaX - spanX;
+            let origenRampaY = finRampaY - (spanX * Math.tan(phys.angRampaRad));
+            let longitudRampa = Math.hypot(spanX, finRampaY - origenRampaY);
+            
+            ctx.fillStyle = "#ecf0f1";
+            ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+
+            ctx.beginPath();
+            ctx.moveTo(origenRampaX, origenRampaY);
+            ctx.lineTo(finRampaX, finRampaY);
+            ctx.lineTo(origenRampaX, finRampaY); 
+            ctx.fillStyle = "#bdc3c7";
+            ctx.fill();
+            ctx.strokeStyle = "#7f8c8d";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            if(animando && timestamp) {
+                if(!lastTime) lastTime = timestamp;
+                let deltaTime = (timestamp - lastTime) / 1000; 
+                lastTime = timestamp;
+
+                velocidad += phys.aceleracion * deltaTime * 12; 
+                posX += velocidad;
+
+                if (posX > longitudRampa - 80) {
+                    posX = longitudRampa - 80;
+                    velocidad = 0;
+                    animando = false;
+                }
+                if (posX < 0) {
+                    posX = 0;
+                    velocidad = 0;
+                    animando = false;
+                }
+            }
+
+            let offsetDespegue = phys.despegue && animando ? -50 : 0;
+
+            let cajaBaseX = origenRampaX + posX * Math.cos(phys.angRampaRad);
+            let cajaBaseY = origenRampaY + posX * Math.sin(phys.angRampaRad) + offsetDespegue;
+
+            ctx.save();
+            ctx.translate(cajaBaseX, cajaBaseY);
+            ctx.rotate(phys.angRampaRad);
+            
+            ctx.fillStyle = "#e67e22";
+            ctx.fillRect(0, -60, 80, 60);
+            ctx.strokeRect(0, -60, 80, 60);
+            
+            let cmX = 40, cmY = -30; 
+            
+            if(!animando) {
+                let esc = 0.6; 
+                
+                dibujarFlecha(cmX, cmY, cmX, cmY - phys.normal * esc, "#2ecc71", "N");
+                
+                if(phys.fuerzaNeta === 0 && (phys.px + phys.fax) !== 0) {
+                    let fEstatica = -(phys.px + phys.fax);
+                    dibujarFlecha(cmX, cmY, cmX + fEstatica * esc, cmY, "#f1c40f", "Fr");
+                } else if (phys.aceleracion !== 0) {
+                    let dir = Math.sign(phys.px + phys.fax);
+                    dibujarFlecha(cmX, cmY, cmX - (dir * phys.friccionMax * esc), cmY, "#f1c40f", "Fr");
+                }
+
+                if(fuerzaApp > 0) {
+                    let fxVis = phys.fax * esc;
+                    let fyVis = phys.fay * esc;
+                    dibujarFlecha(cmX, cmY, cmX + fxVis, cmY - fyVis, "#9b59b6", "F_ext");
+                }
+
+                ctx.restore(); 
+                
+                let absCmX = cajaBaseX + cmX * Math.cos(phys.angRampaRad) - cmY * Math.sin(phys.angRampaRad);
+                let absCmY = cajaBaseY + cmX * Math.sin(phys.angRampaRad) + cmY * Math.cos(phys.angRampaRad);
+
+                dibujarFlecha(absCmX, absCmY, absCmX, absCmY + (masa * g * esc), "#34495e", "P");
+            } else {
+                ctx.restore();
+            }
+
+            if(animando) {
+                requestID = requestAnimationFrame(dibujarEscena);
+            }
+        }
+
+        [inAngulo, inMasa, inFriccion, inFuerza, inAngFuerza].forEach(input => {
+            input.addEventListener('input', () => { posX = 0; velocidad = 0; animando = false; dibujarEscena(); });
+        });
+
+        document.getElementById('btnSimular').addEventListener('click', () => {
+            if(!animando) {
+                animando = true;
+                lastTime = 0;
+                requestID = requestAnimationFrame(dibujarEscena);
+            }
+        });
+
+        document.getElementById('btnReiniciar').addEventListener('click', () => {
+            animando = false;
+            cancelAnimationFrame(requestID);
+            posX = 0; velocidad = 0; dibujarEscena();
+        });
+
+        actualizarTelemetria();
+        dibujarEscena();
+    </script>
+</body>
+</html>
